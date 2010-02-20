@@ -10,8 +10,15 @@
 
 int main(int argc, char *argv[])
 {
+	const char *action = NULL, *devpath = NULL, *physdevpath = NULL;
 	int sd = -1;
 	struct sockaddr_un serv_addr_un;
+	if (argc > 3)
+	{
+		action = argv[1];
+		devpath = argv[2];
+		physdevpath = argv[3];
+	}
 	memset(&serv_addr_un, 0, sizeof(serv_addr_un));
 	serv_addr_un.sun_family = AF_LOCAL;
 	strcpy(serv_addr_un.sun_path, "/tmp/hotplug.socket");
@@ -20,22 +27,27 @@ int main(int argc, char *argv[])
 	{
 		if (connect(sd, (const struct sockaddr*)&serv_addr_un, sizeof(serv_addr_un)) >= 0)
 		{
-			char *val = NULL;
 			char data[1024];
-			val = getenv("ACTION");
-			if (val)
+			if (!action) action = getenv("ACTION");
+			if (action)
 			{
-				snprintf(data, sizeof(data) - 1, "ACTION=%s", val);
+				snprintf(data, sizeof(data) - 1, "ACTION=%s", action);
 				data[sizeof(data) - 1] = 0;
 				send(sd, data, strlen(data) + 1, 0);
-				val = getenv("MDEV");
-				if (!val) val = "-";
-				snprintf(data, sizeof(data) - 1, "DEVPATH=%s", val);
+				if (!devpath)
+				{
+					devpath = getenv("MDEV");
+					if (!devpath) devpath = "-";
+				}
+				snprintf(data, sizeof(data) - 1, "DEVPATH=%s", devpath);
 				data[sizeof(data) - 1] = 0;
 				send(sd, data, strlen(data) + 1, 0);
-				val = getenv("PHYSDEVPATH");
-				if (!val) val = "-";
-				snprintf(data, sizeof(data) - 1, "PHYSDEVPATH=%s", val);
+				if (!physdevpath)
+				{
+					physdevpath = getenv("PHYSDEVPATH");
+					if (!physdevpath) physdevpath = "-";
+				}
+				snprintf(data, sizeof(data) - 1, "PHYSDEVPATH=%s", physdevpath);
 				data[sizeof(data) - 1] = 0;
 				send(sd, data, strlen(data) + 1, 0);
 			}
