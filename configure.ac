@@ -1,0 +1,8 @@
+AC_INIT([hotplug_e2_helper], [1.0])
+AM_INIT_AUTOMAKE($PACKAGE_NAME, $PACKAGE_VERSION)
+
+AC_PROG_CC
+
+AC_OUTPUT([
+Makefile
+])
