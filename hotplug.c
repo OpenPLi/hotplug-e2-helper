@@ -10,7 +10,7 @@
 
 int main(int argc, char *argv[])
 {
-	const char *action = NULL, *devpath = NULL, *physdevpath = NULL;
+	const char *action = NULL, *devpath = NULL, *physdevpath = NULL, *mediastatus = NULL;
 	int sd = -1;
 	struct sockaddr_un serv_addr_un;
 	if (argc > 3)
@@ -34,23 +34,33 @@ int main(int argc, char *argv[])
 				snprintf(data, sizeof(data) - 1, "ACTION=%s", action);
 				data[sizeof(data) - 1] = 0;
 				send(sd, data, strlen(data) + 1, 0);
-				if (!devpath)
-				{
-					devpath = getenv("MDEV");
-					if (!devpath) devpath = "-";
-				}
-				snprintf(data, sizeof(data) - 1, "DEVPATH=%s", devpath);
-				data[sizeof(data) - 1] = 0;
-				send(sd, data, strlen(data) + 1, 0);
-				if (!physdevpath)
-				{
-					physdevpath = getenv("PHYSDEVPATH");
-					if (!physdevpath) physdevpath = "-";
-				}
-				snprintf(data, sizeof(data) - 1, "PHYSDEVPATH=%s", physdevpath);
-				data[sizeof(data) - 1] = 0;
-				send(sd, data, strlen(data) + 1, 0);
 			}
+			else
+			{
+				mediastatus = getenv("X_E2_MEDIA_STATUS");
+				if (mediastatus)
+				{
+					snprintf(data, sizeof(data) - 1, "X_E2_MEDIA_STATUS=%s", mediastatus);
+					data[sizeof(data) - 1] = 0;
+					send(sd, data, strlen(data) + 1, 0);
+				}
+			}
+			if (!devpath)
+			{
+				devpath = getenv("DEVPATH");
+				if (!devpath) devpath = "-";
+			}
+			snprintf(data, sizeof(data) - 1, "DEVPATH=%s", devpath);
+			data[sizeof(data) - 1] = 0;
+			send(sd, data, strlen(data) + 1, 0);
+			if (!physdevpath)
+			{
+				physdevpath = getenv("PHYSDEVPATH");
+				if (!physdevpath) physdevpath = "-";
+			}
+			snprintf(data, sizeof(data) - 1, "PHYSDEVPATH=%s", physdevpath);
+			data[sizeof(data) - 1] = 0;
+			send(sd, data, strlen(data) + 1, 0);
 		}
 		close(sd);
 	}
