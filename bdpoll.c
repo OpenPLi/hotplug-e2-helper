@@ -48,15 +48,17 @@ static void bdpoll_notify(const char devname[])
 	char buf[1024];
 	if (media_status == MEDIA_STATUS_GOT_MEDIA)
 	{
-		snprintf(buf, sizeof(buf), "/media/%s", devname);
+		snprintf(buf, sizeof(buf), "/autofs/%s", devname);
 		mkdir(buf, 0777);
-		snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /media/%s", devname, devname);
+		snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /autofs/%s", devname, devname);
 		system(buf);
 	}
 	else
 	{
 		snprintf(buf, sizeof(buf), "/bin/umount /dev/%s", devname);
 		system(buf);
+		snprintf(buf, sizeof(buf), "/autofs/%s", devname);
+		unlink(buf);
 	}
 	snprintf(buf, sizeof(buf), "/block/%s", devname);
 	setenv("DEVPATH", buf, 1);
