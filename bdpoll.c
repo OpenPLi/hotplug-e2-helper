@@ -50,8 +50,20 @@ static void bdpoll_notify(const char devname[])
 	{
 		snprintf(buf, sizeof(buf), "/autofs/%s", devname);
 		mkdir(buf, 0777);
-		snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /autofs/%s", devname, devname);
-		system(buf);
+		// workaround for crashing mount -t auto on audio CD
+		// try DVD first (because CDFS also works but yields an ISO)
+		snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /autofs/%s", devname, devname);
+		if (system(buf) != 0)
+		{
+			// udf fails, try cdfs
+			snprintf(buf, sizeof(buf), "/bin/mount -t cdfs /dev/%s /autofs/%s", devname, devname);
+			if (system(buf) != 0)
+			{
+				// cdfs failed too. Does that even make sense?
+				snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /autofs/%s", devname, devname);
+				system(buf);
+			}
+		}
 	}
 	else
 	{
