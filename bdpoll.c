@@ -48,19 +48,19 @@ static void bdpoll_notify(const char devname[])
 	char buf[1024];
 	if (media_status == MEDIA_STATUS_GOT_MEDIA)
 	{
-		snprintf(buf, sizeof(buf), "/autofs/%s", devname);
+		snprintf(buf, sizeof(buf), "/media/%s", devname);
 		mkdir(buf, 0777);
 		// workaround for crashing mount -t auto on audio CD
 		// try DVD first (because CDFS also works but yields an ISO)
-		snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /autofs/%s", devname, devname);
+		snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /media/%s", devname, devname);
 		if (system(buf) != 0)
 		{
 			// udf fails, try cdfs
-			snprintf(buf, sizeof(buf), "/bin/mount -t cdfs /dev/%s /autofs/%s", devname, devname);
+			snprintf(buf, sizeof(buf), "/bin/mount -t cdfs /dev/%s /media/%s", devname, devname);
 			if (system(buf) != 0)
 			{
 				// cdfs failed too. Does that even make sense?
-				snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /autofs/%s", devname, devname);
+				snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /media/%s", devname, devname);
 				system(buf);
 			}
 		}
@@ -69,7 +69,7 @@ static void bdpoll_notify(const char devname[])
 	{
 		snprintf(buf, sizeof(buf), "/bin/umount /dev/%s", devname);
 		system(buf);
-		snprintf(buf, sizeof(buf), "/autofs/%s", devname);
+		snprintf(buf, sizeof(buf), "/media/%s", devname);
 		unlink(buf);
 	}
 	snprintf(buf, sizeof(buf), "/block/%s", devname);
