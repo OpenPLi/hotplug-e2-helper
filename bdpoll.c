@@ -41,7 +41,7 @@ enum {
 };
 
 static int media_status = MEDIA_STATUS_NO_MEDIA;
-static const int interval_in_seconds = 1;
+static const int interval_in_seconds = 2;
 static int media_type = 0;
 static char volume_name[33];
 bool media_mounted = false;
