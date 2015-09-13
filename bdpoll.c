@@ -42,42 +42,153 @@ enum {
 
 static int media_status = MEDIA_STATUS_NO_MEDIA;
 static const int interval_in_seconds = 2;
+static int media_type = 0;
+static char volume_name[33];
+bool media_mounted = false;
+
+static char *trimwhitespace(char *str)
+{
+	char *end;
+
+	while(isspace(*str)) str++;
+
+	if(*str == 0)
+		return str;
+
+	end = str + strlen(str) - 1;
+	while(end > str && isspace(*end)) end--;
+	*(end+1) = 0;
+
+	return str;
+}
+
+static int media_read_data ( const char device_file[], int seek, int len, char * data)
+{
+	unsigned int fd;
+	int ret = -1;
+	if ( device_file != NULL) {
+		if (( fd = open (device_file, O_RDONLY)) != -1) {
+			if (lseek (fd, seek, SEEK_SET) != -1) {
+				if ( read ( fd, data, len) != -1) {
+					data[len] = '\0';
+					ret = 0;
+				}
+			}
+		}
+		close ( fd);
+	}
+	return ret;
+}
 
 static void bdpoll_notify(const char devname[])
 {
 	char buf[1024];
-	if (media_status == MEDIA_STATUS_GOT_MEDIA)
-	{
-		snprintf(buf, sizeof(buf), "/media/%s", devname);
-		mkdir(buf, 0777);
-		// workaround for crashing mount -t auto on audio CD
-		// try DVD first (because CDFS also works but yields an ISO)
-		snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /media/%s", devname, devname);
-		if (system(buf) != 0)
-		{
-			// udf fails, try cdfs
-			snprintf(buf, sizeof(buf), "/bin/mount -t cdfs /dev/%s /media/%s", devname, devname);
-			if (system(buf) != 0)
-			{
-				// cdfs failed too. Does that even make sense?
-				snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /media/%s", devname, devname);
+	struct stat cdrom_link;
+	snprintf(buf, sizeof(buf), "/dev/%s", devname);
+	// create symlink cdrom to the device needed for audio cd's  gst-1.0
+	if (lstat("/dev/cdrom", &cdrom_link) != 0) {
+		symlink(buf, "/dev/cdrom");
+	}
+	if (media_status == MEDIA_STATUS_GOT_MEDIA) {
+		if (media_type == CDS_AUDIO) {
+			snprintf(volume_name,sizeof(volume_name), "%s", devname);
+			snprintf(buf, sizeof(buf), "/media/%s", volume_name);
+			// To Do: adapting the mount with cdfs to work whitout the deprecated cdfs file system.
+			mkdir(buf, 0777);
+			snprintf(buf, sizeof(buf), "/bin/mount -t cdfs /dev/%s /media/%s", devname, volume_name);
+			if (system(buf) == 0) {
+				setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
+				snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper add /block/%s /block/%s/device 1", devname, devname);
 				system(buf);
+				media_mounted = true;
+			}
+			else
+				printf("Unable to mount disc\n");
+		}
+		// CD/DVD will be mounted to his volume_label if avbl else to devicename
+		else if (media_type >= CDS_DATA_1) {
+			int seek =32808;
+			int len = 32;
+			char * out_buff = NULL;
+			out_buff = malloc( (sizeof (out_buff)) * (len+1));
+			snprintf(buf, sizeof(buf), "/dev/%s", devname);
+			if ( media_read_data ( buf, seek, len, out_buff) != -1) {
+				if (!strncmp(out_buff, "NO NAME", 7) || !strncmp (out_buff, " ",1)) {
+					snprintf(volume_name, sizeof(volume_name), "UNTITLED-DISC");
+				}
+				else {
+					// remove white spaces.
+					char *trimmed_buff = NULL;
+					trimmed_buff = trimwhitespace(out_buff);
+					snprintf(volume_name, sizeof(volume_name), "%s", trimmed_buff);
+				}
+			}
+			else {
+				snprintf(volume_name, sizeof(volume_name), "%s", devname);
+			}
+			free(out_buff);
+			out_buff = NULL;
+			snprintf(buf, sizeof(buf),"/media/%s", volume_name);
+			mkdir(buf, 0777);
+			snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /media/%s", devname, volume_name);
+			printf("Mounting device /dev/%s to /media/%s", devname, volume_name);
+			if (system(buf) == 0) {
+				setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
+				snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper add /block/%s /block/%s/device 1", devname, devname);
+				system(buf);
+				media_mounted = true;
+			}
+			else {
+				// udf fails, try iso9660
+				snprintf(buf, sizeof(buf), "/bin/mount -t iso9660 /dev/%s /media/%s", devname, volume_name);
+				if(system(buf) == 0) {
+					setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
+					snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper add /block/%s /block/%s/device 1", devname, devname);
+					system(buf);
+					media_mounted = true;
+				}
+				else {
+					// iso9660 fails try auto does it make sense ?
+					snprintf(buf, sizeof(buf), "/bin/mount /dev/%s /media/%s", devname, volume_name);
+					if(system(buf) == 0) {
+						setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
+						snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper add /block/%s /block/%s/device 1", devname, devname);
+						system(buf);
+						media_mounted = true;
+					}
+					else
+						printf("Unable to mount disc\n");
+				}
 			}
 		}
+		else {
+			// unsuported media
+			printf("Unable to mount disc\n");
+		}
 	}
-	else
-	{
-		snprintf(buf, sizeof(buf), "/bin/umount /dev/%s", devname);
-		system(buf);
-		snprintf(buf, sizeof(buf), "/media/%s", devname);
-		unlink(buf);
+	else {
+		// unmounting cd/dvd upon removal. Clear mointpoint.
+		if (media_mounted) {
+			snprintf(buf, sizeof(buf), "/bin/umount /dev/%s -l", devname);
+			system(buf);
+			snprintf(buf, sizeof(buf), "/media/%s", volume_name);
+			unlink(buf);
+			rmdir(buf);
+			// Clear volume_name.
+			memset(&volume_name[0], 0, sizeof(volume_name));
+			setenv("X_E2_MEDIA_STATUS", "0", 1);
+			// Removing device after cd/dvd is removed.
+			snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper remove /block/%s /block/%s/device 1", devname, devname);
+			system(buf);
+			media_mounted = false;
+		}
+		else {
+			setenv("X_E2_MEDIA_STATUS", "0", 1);
+			setenv("DEVPATH", NULL, 1);
+			setenv("PHYSDEVPATH", NULL, 1);
+			setenv("ACTION", NULL, 1);
+		}
 	}
-	snprintf(buf, sizeof(buf), "/block/%s", devname);
-	setenv("DEVPATH", buf, 1);
-	snprintf(buf, sizeof(buf), "/block/%s/device", devname);
-	setenv("PHYSDEVPATH", buf, 1);
-	setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
-	system("/usr/bin/hotplug_e2_helper");
 }
 
 static bool is_mounted(const char device_file[])
@@ -139,9 +250,13 @@ static bool poll_for_media(const char device_file[], bool is_cdrom, bool support
 		drive = ioctl(fd, CDROM_DRIVE_STATUS, CDSL_CURRENT);
 		switch (drive) {
 		case CDS_NO_INFO:
+			media_type = 0;
 		case CDS_NO_DISC:
+			media_type = 0;
 		case CDS_TRAY_OPEN:
+			media_type = 0;
 		case CDS_DRIVE_NOT_READY:
+			media_type = 0;
 			break;
 
 		case CDS_DISC_OK:
@@ -149,11 +264,16 @@ static bool poll_for_media(const char device_file[], bool is_cdrom, bool support
 			 * tray; if media check has the same value two times in
 			 * a row then this seems to be the case and we must not
 			 * report that there is a media in it. */
-			if (support_media_changed &&
-			    ioctl(fd, CDROM_MEDIA_CHANGED, CDSL_CURRENT) &&
-			    ioctl(fd, CDROM_MEDIA_CHANGED, CDSL_CURRENT)) {
+			if (support_media_changed) {
+				if (ioctl(fd, CDROM_MEDIA_CHANGED, CDSL_CURRENT) &&
+					ioctl(fd, CDROM_MEDIA_CHANGED, CDSL_CURRENT)) {
+					printf("Tray open");
+					media_type = 0;
+					ioctl(fd, CDROM_LOCKDOOR, 0);
+				}
 			} else {
 				got_media = true;
+				media_type = ioctl(fd, CDROM_DISC_STATUS , CDSL_CURRENT);
 				/*
 				 * this is a bit of a hack; because we mount the cdrom, the eject button
 				 * would not work, so we would never detect 'medium removed', and
@@ -166,6 +286,7 @@ static bool poll_for_media(const char device_file[], bool is_cdrom, bool support
 
 		case -1:
 			err("%s: CDROM_DRIVE_STATUS: %s", device_file, strerror(errno));
+			media_type = 0;
 			break;
 		}
 
@@ -187,6 +308,7 @@ static bool poll_for_media(const char device_file[], bool is_cdrom, bool support
 		if (!got_media) {
 			printf("Media removal detected on %s\n", device_file);
 			ret = true;
+			media_type = 0;
 			/* have to this to trigger appropriate hotplug events */
 			fd = open(device_file, O_RDONLY | O_NONBLOCK);
 			if (fd >= 0) {
@@ -207,8 +329,10 @@ static bool poll_for_media(const char device_file[], bool is_cdrom, bool support
 	/* update our current status */
 	if (got_media)
 		media_status = MEDIA_STATUS_GOT_MEDIA;
-	else
+	else {
 		media_status = MEDIA_STATUS_NO_MEDIA;
+		media_type = 0;
+	}
 
 	return ret;
 }
