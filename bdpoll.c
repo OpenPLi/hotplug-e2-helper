@@ -137,6 +137,7 @@ static void bdpoll_notify(const char devname[])
 			char * out_buff = NULL;
 			out_buff = malloc( (sizeof (out_buff)) * (len+1));
 			snprintf(buf, sizeof(buf), "/dev/%s", devname);
+			volume_name[0] = '\0';          // Set to empty string
 			if ( media_read_data ( buf, seek, len, out_buff) != -1) {
 				if (!strncmp(out_buff, "NO NAME", 7) || !strncmp (out_buff, " ",1)) {
 					snprintf(volume_name, sizeof(volume_name), "UNTITLED-DISC");
@@ -148,7 +149,7 @@ static void bdpoll_notify(const char devname[])
 					snprintf(volume_name, sizeof(volume_name), "%s", trimmed_buff);
 				}
 			}
-			else {
+			if (volume_name[0] == '\0') {   // Mustn't have empty string
 				snprintf(volume_name, sizeof(volume_name), "%s", devname);
 			}
 			free(out_buff);
@@ -156,7 +157,7 @@ static void bdpoll_notify(const char devname[])
 			snprintf(buf, sizeof(buf),"/media/%s", volume_name);
 			mkdir(buf, 0777);
 			snprintf(buf, sizeof(buf), "/bin/mount -t udf /dev/%s /media/%s", devname, volume_name);
-			printf("Mounting device /dev/%s to /media/%s", devname, volume_name);
+			printf("Mounting device /dev/%s to /media/%s\n", devname, volume_name);
 			if (system(buf) == 0) {
 				setenv("X_E2_MEDIA_STATUS", (media_status == MEDIA_STATUS_GOT_MEDIA) ? "1" : "0", 1);
 				snprintf(buf, sizeof(buf), "/usr/bin/hotplug_e2_helper add /block/%s /block/%s/device 1", devname, devname);
@@ -372,7 +373,7 @@ static bool poll_for_media(const char devname[], bool is_cdrom, bool support_med
 
 static void usage(const char argv0[])
 {
-	fprintf(stderr, "usage: %s <devname> [-c][-m]\n", argv0);
+	fprintf(stderr, "usage: %s <devname> [-c][-m][-D]\n", argv0);
 }
 
 int main(int argc, char *argv[], char *envp[])
@@ -381,8 +382,9 @@ int main(int argc, char *argv[], char *envp[])
 	bool is_cdrom = false;
 	bool support_media_changed = false;
 	int opt;
+	bool run_as_daemon = true;
 
-	while ((opt = getopt(argc, argv, "cm")) != -1) {
+	while ((opt = getopt(argc, argv, "cmD")) != -1) {
 		switch (opt) {
 		case 'c':
 			is_cdrom = true;
@@ -390,20 +392,23 @@ int main(int argc, char *argv[], char *envp[])
 		case 'm':
 			support_media_changed = true;
 			break;
+		case 'D':
+			run_as_daemon = false;
+			break;
 		default:
 			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
 
-	if (optind > argc) {
+	if (optind >= argc) {
 		usage(argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	devname = argv[optind];
 
-	daemon(0, 0);
+	if (run_as_daemon) daemon(0, 0);
 
 	for (;;) {
 		if (poll_for_media(devname, is_cdrom, support_media_changed))
